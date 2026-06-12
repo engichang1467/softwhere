@@ -18,7 +18,6 @@ softwhere/
   Makefile                        # experiment entrypoints
   run_exp*.sh                     # one wrapper per experiment
   experiment_env.sh               # shared runner/logging helper
-  reproduce.sh                    # original full preliminary reproduction script
   requirements.txt                # pinned shared environment
   lookwhere/                      # LookWhere fork + SoftWhere experiment code
   Open-TokenLearner/              # TokenLearner fork
@@ -50,7 +49,7 @@ make exp6 CUDA_VISIBLE_DEVICES=0 STEPS=500
 ```
 
 The LookWhere checkpoint, Imagenette, and ADE20K data should already be present
-if you ran `reproduce.sh`. If not, run `make prepare` to clone/update the repos,
+if you ran `make prepare`. Run `make prepare` to clone/update the repos,
 install the uv environment, and prepare the checkpoint/data without launching an
 experiment.
 
@@ -120,13 +119,11 @@ lookwhere/softwhere_nms_robustness_div0_vs_e2e_cls_sanity.csv
 
 Current visualization:
 
-```text
-lookwhere/softwhere_v10_sr_distilled.png
-```
+![softwhere_v10_sr_distilled](img/softwhere_v10_sr_distilled.png)
 
 ## Current Headline Results
 
-The curated notes live in `personal/results/`. The short version:
+The curated notes live in [wiki](https://github.com/engichang1467/softwhere/wiki). The short version:
 
 - Resolution parity matters: TokenLearner-SR fixes the earlier low-resolution
   coverage failure.
@@ -158,30 +155,3 @@ Sanity-check metrics for the mini E2E CLS head:
 
 These are object-coverage diagnostics, not final LookWhere-comparable kNN
 classification or segmentation numbers.
-
-## Legacy Full Reproduction
-
-`reproduce.sh` is the original full preliminary reproduction script. It clones
-the two project forks, builds the shared environment, downloads checkpoint/data,
-and runs the earlier spike: OpenTokenLearner tests, gradient-flow proof,
-multi-foveal visualization, distillation sweeps, teacher-agreement proxy,
-map-diversity, and the initial ADE20K coverage evaluation.
-
-Use it when bootstrapping a fresh machine:
-
-```bash
-cd softwhere
-./reproduce.sh
-```
-
-Common options:
-
-```bash
-SKIP_ADE20K=1 ./reproduce.sh
-CUDA_VISIBLE_DEVICES=MIG-<uuid> ./reproduce.sh
-SOFTWHERE_BASE=/data/se2 ./reproduce.sh
-DIST_STEPS=300 ./reproduce.sh
-```
-
-The current proposal results are driven by the `make exp1` through `make exp7`
-workflow above.

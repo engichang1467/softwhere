@@ -1,99 +1,187 @@
-# SoftWhere — Reproduction
+# SoftWhere
 
-`reproduce.sh` rebuilds the **SoftWhere** preliminary results (reported in
-`SoftWhere_Proposal.pdf`) from scratch: it clones the two project forks at branch
-`project-e-2`, builds one shared environment, downloads the data, and runs the full
-de-risking spike — gradient-flow proof, multi-foveal visualizations, distillation
-sweeps, the teacher-agreement proxy, the map-diversity sweep, and the ADE20K
-multi-object coverage eval.
+SoftWhere is a research prototype for replacing LookWhere's hard single-map
+selector with a sampling-free, multi-foveal TokenLearner selector. The current
+proposal and results are summarized in `SoftWhere_Proposal.pdf`.
 
----
+The latest diagnostic result is positive but still scoped: TokenLearner-SR plus
+mini end-to-end classifier-signal training improves ADE20K small-object coverage
+over the LookWhere single-map baseline across the tested patch budgets. The next
+research step is downstream kNN classification and segmentation, not more local
+coverage tuning.
 
-## 1. Prerequisites
+## Repository Layout
 
-### Install `uv` (required)
-The script builds its environment with [`uv`](https://docs.astral.sh/uv/). **Install it
-before running** — the script exits immediately if `uv` is not on your `PATH`.
-
-```bash
-# official installer (Linux/macOS)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-# …or via pip / pipx
-pip install uv            # or: pipx install uv
-
-uv --version              # verify it is on PATH
+```text
+softwhere/
+  SoftWhere_Proposal.pdf          # current proposal writeup
+  Makefile                        # experiment entrypoints
+  run_exp*.sh                     # one wrapper per experiment
+  experiment_env.sh               # shared runner/logging helper
+  reproduce.sh                    # original full preliminary reproduction script
+  requirements.txt                # pinned shared environment
+  lookwhere/                      # LookWhere fork + SoftWhere experiment code
+  Open-TokenLearner/              # TokenLearner fork
+  personal/results/               # curated experiment notes and interpretations
 ```
 
-### Other tools
-`git`, `curl`, `unzip`, `tar` (all standard). The script checks for these and stops
-with a clear message if one is missing.
+## Setup
 
-### GPU
-A CUDA GPU is expected (the pinned stack is torch 2.12 / CUDA 13). Defaults to GPU 0;
-override with `CUDA_VISIBLE_DEVICES` (e.g. a MIG UUID) — see below.
+Create or reuse the shared Python environment from `requirements.txt`:
 
-### Repo access
-SSH access to the two GitHub forks, on branch `project-e-2`:
-`engichang1467/lookwhere` and `engichang1467/Open-TokenLearner`. **Both forks must
-already contain the spike code** (the modified `modeling.py` / `tokenlearner/modules.py`
-and all the `lookwhere/*.py` scripts). If you maintain those forks, push your latest
-code to `project-e-2` first.
+```bash
+cd softwhere
+uv venv --python=3.12 .venv
+uv pip install --no-deps --python .venv/bin/python -r requirements.txt
+```
 
----
+The experiment wrappers default to:
 
-## 2. Run it
+```text
+PY=./.venv/bin/python
+CUDA_VISIBLE_DEVICES=0
+OTL_PATH=./Open-TokenLearner
+```
+
+Override any of these when invoking `make`, for example:
+
+```bash
+make exp6 CUDA_VISIBLE_DEVICES=0 STEPS=500
+```
+
+The LookWhere checkpoint, Imagenette, and ADE20K data should already be present
+if you ran `reproduce.sh`. If not, run `make prepare` to clone/update the repos,
+install the uv environment, and prepare the checkpoint/data without launching an
+experiment.
+
+## Current Experiment Workflow
+
+Use the Makefile from the top-level `softwhere` directory:
+
+```bash
+make help
+make exp1
+make exp2
+make all
+```
+
+Targets:
+
+| Target | Script | Purpose |
+|---|---|---|
+| `make prepare` | `experiment_env.sh prepare` | Clone/update repos, install the shared uv environment, and prepare checkpoint/data. |
+| `make exp1` | `run_exp1_resolution_parity.sh` | Train/evaluate TokenLearner-SR with `diversity=1`; creates `softwhere_head_v10_sr_div1.pt`. |
+| `make exp2` | `run_exp2_selection_policy_ablation.sh` | Compare aggregate, per-map top-k, per-map NMS, distance penalty, random, and LookWhere. |
+| `make exp3` | `run_exp3_nms_robustness_div1.sh` | Sweep NMS distance and patch budget for the `div1` head. |
+| `make exp4` | `run_exp4_diversity_and_s_sweeps.sh` | Sweep diversity weights and fovea count `S`; identifies `div0/S=4` as the main distilled setting. |
+| `make exp5` | `run_exp5_main_div0_sanity_check.sh` | Check teacher agreement, visualization, and focused NMS coverage for `div0`. |
+| `make exp6` | `run_exp6_mini_e2e_cls.sh` | Run mini end-to-end CLS-signal training from the `div0` head. |
+| `make exp7` | `run_exp7_e2e_head_sanity_check.sh` | Sanity-check the mini E2E CLS head. |
+| `make coverage` | experiments 1-5 | Run the coverage-focused distilled-head workflow. |
+| `make e2e` | experiments 6-7 | Run and check the mini E2E workflow; requires the `div0` head from exp4. |
+| `make all` | experiments 1-7 | Run the full current diagnostic sequence. |
+
+Each script writes a timestamped console log to:
+
+```text
+personal/logs/
+```
+
+The scripts intentionally fail early if a required head is missing. For example,
+`exp2` requires `lookwhere/softwhere_head_v10_sr_div1.pt`, and `exp6` requires
+`lookwhere/softwhere_head_v10_sr_div0.pt`.
+
+To let an experiment script run preparation first, use:
+
+```bash
+SOFTWHERE_AUTO_PREPARE=1 make exp1
+```
+
+## Important Artifacts
+
+Current key heads:
+
+```text
+lookwhere/softwhere_head_v10_sr_div1.pt
+lookwhere/softwhere_head_v10_sr_div0.pt
+lookwhere/softwhere_head_v10_sr_div0_mini_e2e_cls.pt
+```
+
+Current key CSVs:
+
+```text
+lookwhere/softwhere_nms_robustness_div1.csv
+lookwhere/softwhere_nms_robustness_diversity.csv
+lookwhere/softwhere_nms_robustness_S.csv
+lookwhere/softwhere_nms_robustness_main_div0.csv
+lookwhere/softwhere_nms_robustness_div0_vs_e2e_cls.csv
+lookwhere/softwhere_nms_robustness_div0_vs_e2e_cls_sanity.csv
+```
+
+Current visualization:
+
+```text
+lookwhere/softwhere_v10_sr_distilled.png
+```
+
+## Current Headline Results
+
+The curated notes live in `personal/results/`. The short version:
+
+- Resolution parity matters: TokenLearner-SR fixes the earlier low-resolution
+  coverage failure.
+- Selection policy matters: aggregating foveal maps loses the coverage signal,
+  while per-map NMS turns the maps into a positive coverage result.
+- The best distilled setting is `v10 / TokenLearner-SR conv / S=4 /
+  diversity=0 / per_map_nms / nms_dist=2`.
+- Mini end-to-end CLS training improves the distilled head and becomes the
+  current main coverage result.
+
+Focused NMS coverage for the mini E2E CLS head:
+
+| k | LookWhere | Distilled `div0` | Mini E2E CLS | Margin vs. LookWhere |
+|---:|---:|---:|---:|---:|
+| 16 | 0.2622 | 0.2591 | 0.2844 | +0.0221 |
+| 72 | 0.5691 | 0.6077 | 0.6413 | +0.0723 |
+| 128 | 0.6921 | 0.7495 | 0.7664 | +0.0743 |
+| 136 | 0.7012 | 0.7605 | 0.7819 | +0.0807 |
+
+Sanity-check metrics for the mini E2E CLS head:
+
+| Metric | Value |
+|---|---:|
+| Teacher top-k recall | 0.571 |
+| Teacher top-k IoU | 0.404 |
+| Random top-k recall | 0.099 |
+| Map overlap | 0.425 |
+| Plain multi-foveal recall at `k=136` | 0.712 |
+
+These are object-coverage diagnostics, not final LookWhere-comparable kNN
+classification or segmentation numbers.
+
+## Legacy Full Reproduction
+
+`reproduce.sh` is the original full preliminary reproduction script. It clones
+the two project forks, builds the shared environment, downloads checkpoint/data,
+and runs the earlier spike: OpenTokenLearner tests, gradient-flow proof,
+multi-foveal visualization, distillation sweeps, teacher-agreement proxy,
+map-diversity, and the initial ADE20K coverage evaluation.
+
+Use it when bootstrapping a fresh machine:
 
 ```bash
 cd softwhere
 ./reproduce.sh
 ```
 
-Common variations (any `UPPER_CASE` config var can be overridden via the environment):
+Common options:
 
 ```bash
-SKIP_ADE20K=1 ./reproduce.sh                  # skip the ~923MB ADE20K download + coverage
-CUDA_VISIBLE_DEVICES=MIG-<uuid> ./reproduce.sh # pin a specific GPU / MIG slice
-SOFTWHERE_BASE=/data/se2 ./reproduce.sh        # clone + work somewhere other than ./
-DIST_STEPS=300 ./reproduce.sh                  # shorter (less faithful) distillation
+SKIP_ADE20K=1 ./reproduce.sh
+CUDA_VISIBLE_DEVICES=MIG-<uuid> ./reproduce.sh
+SOFTWHERE_BASE=/data/se2 ./reproduce.sh
+DIST_STEPS=300 ./reproduce.sh
 ```
 
-First run downloads several GB (checkpoint ~440 MB, imagenette ~325 MB, ADE20K
-~923 MB) and takes a while; re-runs skip clones/downloads/venv that already exist.
-
----
-
-## 3. What it outputs
-
-### Console (the numbers)
-As it runs you'll see, in order:
-
-| Step | What prints | Expected (≈, ±0.01–0.03) |
-|---|---|---|
-| OpenTokenLearner tests | pytest summary | `25 passed` |
-| Gradient-flow proof | per-param grad norms + verdict | `PASS` (6 head params, no leakage) |
-| Teacher-agreement proxy | recall / IoU vs. teacher | recall ~0.42 (random ~0.10) |
-| Map-diversity sweep | table over diversity weights | div=1: overlap ~0.02, fidelity ~0.094 |
-| v1.0 vs v1.1 | fidelity KL | v1.0 ~0.094 < v1.1 ~0.144 |
-| ADE20K coverage | object-recall per selector | LookWhere 0.70 > random 0.61 > SoftWhere 0.47/0.36 (a deliberate negative result — see proposal §5.5) |
-
-### Files (written into the cloned `lookwhere/` repo)
-- **Figures**
-  - `softwhere_v10_untrained.png`, `softwhere_v11_untrained.png` — multi-foveal maps, untrained
-  - `softwhere_v10_distilled.png`, `softwhere_v11_distilled.png` — after distillation (the "money" figure)
-- **Distilled selector heads** (`.pt`)
-  - `softwhere_head_v10_div{0,0.5,1,2}.pt`, `softwhere_head_v11_div{0,0.5,1,2}.pt` — the diversity sweep
-  - `softwhere_head_v10_div1_ade.pt` — in-domain head for the ADE20K eval
-
-The run ends with a `DONE` summary listing these artifacts and the expected headline numbers.
-
----
-
-## 4. Notes
-
-
-- **Environment.** One shared `uv` venv (`.venv/`) is built from `requirements.txt`
-  with `--no-deps` (the file is a complete pinned freeze of both repos' environments,
-  so it installs exactly as listed). It runs both the OpenTokenLearner tests and the
-  LookWhere scripts.
-- **Reproducibility.** Distillation runs are short and seed/order-sensitive; exact
-  decimals vary by ±0.01–0.03 but orderings and conclusions are stable.
+The current proposal results are driven by the `make exp1` through `make exp7`
+workflow above.

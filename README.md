@@ -155,3 +155,10 @@ Sanity-check metrics for the mini E2E CLS head:
 
 These are object-coverage diagnostics, not final LookWhere-comparable kNN
 classification or segmentation numbers.
+
+## References
+
+- [Open-TokenLearner (project-e-2)](https://github.com/engichang1467/Open-TokenLearner/tree/project-e-2) — TokenLearner fork used in this project
+- [LookWhere (project-e-2)](https://github.com/engichang1467/lookwhere/tree/project-e-2) — LookWhere fork used in this project
+- [TokenLearner: Adaptive Space-Time Tokenization for Videos (Ryoo et al., 2021)](https://arxiv.org/abs/2106.11297)
+- [arXiv:2505.18051](https://arxiv.org/abs/2505.18051)

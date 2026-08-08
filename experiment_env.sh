@@ -34,10 +34,6 @@ need() {
 }
 
 softwhere_config() {
-  # Repo URLs. Override if you want to use a local mirror or a different fork.
-  LOOKWHERE_URL="${LOOKWHERE_URL:-git@github.com:engichang1467/lookwhere.git}"
-  OTL_URL="${OTL_URL:-git@github.com:engichang1467/Open-TokenLearner.git}"
-  BRANCH="${BRANCH:-project-e-2}"
 
   # Directory layout. SOFTWHERE_BASE is kept for compatibility with reproduce.sh.
   SOFTWHERE_DIR="${SOFTWHERE_DIR:-${SOFTWHERE_BASE:-$_SOFTWHERE_ENV_DIR}}"
@@ -85,36 +81,6 @@ fetch() {
   curl -fL --retry 3 -C - -o "$dest" "$url" || die "download failed: $url"
 }
 
-clone_or_update() {
-  local url="${1:?repo url required}"
-  local dir="${2:?repo dir required}"
-  local branch="${3:?branch required}"
-
-  if [[ -d "$dir/.git" ]]; then
-    log "checking $(basename "$dir")"
-    git -C "$dir" fetch origin "$branch"
-
-    local current_branch
-    current_branch="$(git -C "$dir" branch --show-current || true)"
-    if [[ "$current_branch" == "$branch" ]]; then
-      ok "$(basename "$dir") already on $branch; local changes are preserved"
-      return
-    fi
-
-    if [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
-      ok "$(basename "$dir") has local changes; leaving it on ${current_branch:-detached HEAD}"
-      ok "stash/commit changes first if you want to switch to $branch"
-      return
-    fi
-
-    git -C "$dir" checkout "$branch"
-    ok "$(basename "$dir") checked out $branch"
-  else
-    log "cloning $(basename "$dir") @ $branch"
-    git clone --branch "$branch" "$url" "$dir" \
-      || die "clone failed for $url (branch $branch). Check the URL/branch."
-  fi
-}
 
 softwhere_install_uv_env() {
   need uv
@@ -171,7 +137,6 @@ softwhere_prepare_data() {
 softwhere_prepare() {
   softwhere_config
 
-  need git
   need curl
   need unzip
   need tar
@@ -186,12 +151,9 @@ softwhere_prepare() {
   echo "OTL_PATH=$OTL_PATH"
   echo "VENV=$VENV"
   echo "REQ=$REQ"
-  echo "BRANCH=$BRANCH"
   echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
   echo "SKIP_ADE20K=$SKIP_ADE20K"
 
-  clone_or_update "$LOOKWHERE_URL" "$LW_DIR" "$BRANCH"
-  clone_or_update "$OTL_URL" "$OTL_PATH" "$BRANCH"
   softwhere_install_uv_env
   softwhere_prepare_data
 }

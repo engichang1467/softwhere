@@ -1,0 +1,78 @@
+# ViT-B/16 + TokenLearner-v1.1 (8 tokens at layer 6) for ImageNet-1k.
+# A100 40GB "max utilization" variant of vit_b16_imagenet_a100_40gb.yaml.
+#
+# Raises the per-GPU batch to fill the 40GB card. Empirically the training step
+# (AdamW + sigmoid BCE + AMP) costs ~1490 MiB fixed + ~54 MiB/image at 224**2, so
+# batch_size 512 peaks at ~29.2 GB on a 40GB A100 (~11 GB headroom for cuDNN
+# workspace, allocator fragmentation and eval). The hard ceiling is ~700 before
+# OOM; 640 (~36 GB) works but is tight. 512 is the safe sweet spot.
+#
+# Bonus: batch_size 512 x grad_accum_steps 8 = effective batch 4096, which is
+# Scenic's native batch size. So this config reproduces the Scenic recipe exactly:
+# base_lr 5e-3, total_steps 28080 (90 epochs), warmup 10000 steps (= 0.356).
+
+model:
+  name: TokenLearnerViT
+  img_size: 224
+  patch_size: 16
+  in_chans: 3
+  num_classes: 1000
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  mlp_dim: 3072
+  num_tokens: 8
+  tokenlearner_loc: 6
+  use_v11: true
+  use_fuser: false
+  bottleneck_dim: 64
+  classifier: gap                  # token pooling: gap (mean) / gmp (max) / gsp (sum)
+  representation_size: null        # optional pre-logits Linear+tanh; null skips it
+  init_head_bias: -10.0            # head bias init (Scenic); pairs with the sigmoid loss
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.1              # stochastic depth, linearly scaled per block (Scenic)
+
+data:
+  dataset: imagenet
+  root: /data/imagenet-1k            # HF parquet download path; ImageFolder roots also work
+  train_split: train
+  val_split: validation
+  num_workers: 16                    # raised from 8 to keep the larger batch fed (box has 64 cores)
+  pin_memory: true
+
+seed: 42                            # Scenic rng_seed
+
+train:
+  epochs: 90
+  batch_size: 512                   # ~29.2 GB peak on a 40GB A100 (measured); ~11 GB headroom.
+                                    # Push to 640 (~36 GB) only if you want to squeeze it; >700 OOMs.
+  warmup_fraction: 0.356            # fraction of total steps (Scenic: 10000/28080 at bs 4096);
+                                    # at effective batch 4096 this is exactly Scenic's 10000-step warmup
+  base_lr: 5.0e-3                   # Scenic's base_lr at effective batch 4096 (512*8 accum)
+  min_lr: 1.0e-5                    # end_learning_rate for the linear decay
+  weight_decay: 0.3                 # Scenic decoupled (AdamW) weight decay
+  optimizer: adamw
+  betas: [0.9, 0.999]
+  grad_clip_norm: 1.0
+  lr_schedule: linear               # linear warmup -> linear decay (Scenic); 'cosine' also supported
+  loss: sigmoid                     # sigmoid BCE on one-hot targets (Scenic); 'softmax' also supported
+  label_smoothing: null             # Scenic applies no label smoothing
+  mixed_precision: true
+  grad_accum_steps: 8               # effective batch 4096 (512*8) = Scenic bs; set to 1 for true bs 512
+                                    # (then rescale base_lr ~ 5e-3 * 512/4096 = 6.25e-4)
+  eval_steps: 1000                  # eval cadence in optimizer steps (Scenic log_eval_steps); null = per epoch
+  checkpoint_steps: 5000            # checkpoint cadence in optimizer steps (Scenic); null = per epoch
+
+eval:
+  batch_size: 512                   # eval is no_grad (no retained activations), so it fits easily
+  metric: top1
+
+wandb:
+  project: opentokenlearner
+  entity: null               # set to your team/username, or leave null for default
+  tags: [vit, tokenlearner, imagenet, a100-40gb]
+  mode: online               # online / offline / disabled (WANDB_MODE env var overrides)
+  log_freq: 100              # train/loss + lr log frequency in steps
+  log_model: false           # log final checkpoint as a wandb Artifact
+  watch_model: false         # wandb.watch - gradients/params, bandwidth-heavy

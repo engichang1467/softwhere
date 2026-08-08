@@ -68,7 +68,7 @@ Targets:
 
 | Target | Script | Purpose |
 |---|---|---|
-| `make prepare` | `experiment_env.sh prepare` | Clone/update repos, install the shared uv environment, and prepare checkpoint/data. |
+| `make prepare` | `experiment_env.sh prepare` | install the shared uv environment, and prepare checkpoint/data. |
 | `make exp1` | `run_exp1_resolution_parity.sh` | Train/evaluate TokenLearner-SR with `diversity=1`; creates `softwhere_head_v10_sr_div1.pt`. |
 | `make exp2` | `run_exp2_selection_policy_ablation.sh` | Compare aggregate, per-map top-k, per-map NMS, distance penalty, random, and LookWhere. |
 | `make exp3` | `run_exp3_nms_robustness_div1.sh` | Sweep NMS distance and patch budget for the `div1` head. |

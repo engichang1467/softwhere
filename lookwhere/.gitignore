@@ -1,0 +1,13 @@
+personal/
+ade_data/
+
+# Ignore all Python bytecode cache folders anywhere
+__pycache__/
+**/__pycache__/
+
+# Ignore PyTorch model checkpoints and txt logs
+*.pt
+*.pth
+*.txt
+*.png
+adversarial_attack.py

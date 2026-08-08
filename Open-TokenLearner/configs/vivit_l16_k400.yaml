@@ -1,0 +1,53 @@
+# ViViT-L/16 + TokenLearner-v1.1 (16 tokens at layer 12) for Kinetics-400.
+# Mirrors "TokenLearner 16at12 + L/16" in the paper: matches base ViViT-L
+# (83.4 Top-1 at 1446 GFLOPS/view) at ~766 GFLOPS/view.
+
+model:
+  name: TokenLearnerViT
+  img_size: 224
+  patch_size: 16
+  tubelet_t: 2
+  num_frames: 32
+  in_chans: 3
+  num_classes: 400
+  embed_dim: 1024
+  depth: 24
+  num_heads: 16
+  mlp_dim: 4096
+  num_tokens: 16
+  tokenlearner_loc: 12
+  temporal_dimensions: 16            # num_frames / tubelet_t
+  use_v11: true
+  use_fuser: false
+  bottleneck_dim: 64
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+
+data:
+  dataset: kinetics400
+  root: /data/k400                  # adjust to the local path
+  train_split: train
+  val_split: val
+  num_workers: 8
+  pin_memory: true
+  clip_len: 32                      # frames per clip = num_frames
+  frame_stride: 2
+
+train:
+  epochs: 30
+  batch_size: 64
+  warmup_epochs: 2
+  base_lr: 5.0e-4
+  min_lr: 1.0e-6
+  weight_decay: 0.05
+  optimizer: adamw
+  betas: [0.9, 0.999]
+  grad_clip_norm: 1.0
+  label_smoothing: 0.1
+  mixed_precision: true
+
+eval:
+  batch_size: 16
+  num_views: 4                      # spatial crops per clip at inference
+  num_clips: 4                      # temporal clips per video at inference
+  metric: top1
